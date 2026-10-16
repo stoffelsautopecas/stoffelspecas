@@ -1,0 +1,12 @@
+source/
+node_modules/
+dist/
+.env*
+!.env.example
+
+
+.deploy/
+
+db/clone/
+
+public/images/products/

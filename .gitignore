@@ -1,0 +1,22 @@
+dist/
+node_modules/
+.env*
+!.env.example
+source/products/
+source/pages/
+source/*.txt
+source/*.html
+source/*.css
+source/*sample.json
+source/*.log
+.vercel/
+
+__pycache__/
+.vercel
+
+.deploy/
+
+reports/
+
+# Snapshot local com estoque interno
+db/clone/

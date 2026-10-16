@@ -1,0 +1,126 @@
+import assert from 'node:assert/strict';
+import { readFile, access, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { JSDOM } from 'jsdom';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const publicDir = path.join(root,'public');
+const load = name => readFile(path.join(publicDir,name),'utf8');
+const catalog = JSON.parse(await load('data/catalog.json'));
+const categories = JSON.parse(await load('data/categories.json'));
+const report = JSON.parse(await readFile(path.join(root,'source/import-report.json'),'utf8'));
+assert.equal(catalog.length, report.expectedProducts, 'O catálogo deve estar completo');
+assert.equal(report.productErrors.length,0);
+assert.equal(report.imageErrors.length,0);
+assert.equal(new Set(catalog.map(p=>p.id)).size,catalog.length);
+assert.equal(new Set(catalog.map(p=>p.slug)).size,catalog.length);
+const images = new Set(await readdir(path.join(publicDir,'images/products')));
+let galleryCount=0;
+for (const p of catalog) {
+  assert.ok(Number.isFinite(p.price) && p.price >= 0,`Preço inválido: ${p.id}`);
+  const full = JSON.parse(await load(`data/products/${p.id}.json`));
+  assert.equal(full.name,p.name);
+  assert.equal(full.available,p.available);
+  assert.ok(!/<(script|iframe|form)\b|onerror\s*=/i.test(full.description),`Descrição insegura: ${p.id}`);
+  for(const img of full.images){assert.ok(images.has(path.basename(img)),`Foto ausente: ${img}`);galleryCount++;}
+  if(p.image)assert.equal(p.image,full.images[0]);
+  assert.ok(categories.some(c=>c.slug===p.category),`Categoria ausente: ${p.id}`);
+}
+const html=await load('index.html'), js=await load('assets/app.js');
+assert.ok(!html.includes('sportcarautopecas.com.br'), 'Vitrine não deve apontar para a loja original');
+const dom = new JSDOM(html,{url:'http://localhost:3001',runScripts:'outside-only',pretendToBeVisual:true});
+dom.window.scrollTo=()=>{};
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+dom.window.fetch=async url=>{
+  try {const text=await load(String(url).replace(/^\//,''));return {ok:true,json:async()=>JSON.parse(text)};}
+  catch{return {ok:false};}
+};
+dom.window.eval(js);
+const waitFor=async condition=>{for(let i=0;i<100;i++){if(condition())return;await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('Estado esperado não encontrado');};
+const doc=dom.window.document;
+await waitFor(()=>doc.querySelector('.showcase .product-card'));
+assert.equal(doc.querySelector('.home-banner img').getAttribute('src'),'/images/brand/banner-optimized.webp','O banner fornecido deve aparecer na home');
+assert.equal(doc.querySelectorAll('.showcase .product-card').length,16,'Vitrines devem ter produtos disponíveis');
+for (const img of doc.querySelectorAll('img')) if(img.getAttribute('src')?.startsWith('/')) await access(path.join(publicDir,new URL(img.src).pathname));
+assert.equal(doc.querySelector('header .brand-logo').getAttribute('src').split('?')[0],'/images/brand/logo-optimized.webp','Logo deve carregar a imagem otimizada');
+assert.equal(doc.querySelectorAll('.mobile-nav [data-mobile-tab]').length,5);
+doc.querySelector('.mobile-nav a[href="/categorias"]').click();
+assert.ok(doc.querySelector('.category-directory'));
+assert.equal(doc.querySelector('.mobile-nav [aria-current="page"]').dataset.mobileTab,'categories');
+doc.querySelector('[data-mobile-search]').click();
+assert.equal(dom.window.location.pathname,'/catalogo');
+assert.equal(doc.activeElement,doc.querySelector('#search input'));
+assert.equal(doc.querySelector('details.filters').open,false,'Filtros devem iniciar recolhidos no celular');
+for (const link of doc.querySelectorAll('#primary-nav a')) {
+  const slug=link.getAttribute('href').slice(1);
+  assert.ok(slug==='promocoes'||categories.some(c=>c.slug===slug),`Navegação inválida: ${slug}`);
+}
+const search=doc.querySelector('#search');search.querySelector('input').value='Honda';search.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+await waitFor(()=>doc.querySelector('.catalog-grid'));
+assert.equal(doc.querySelectorAll('.catalog-grid .product-card').length,24);
+assert.ok([...doc.querySelectorAll('.catalog-grid .product-name')].every(x=>x.textContent.toLowerCase().includes('honda')));
+const next=doc.querySelector('[data-page="2"]');next.click();assert.ok(dom.window.location.search.includes('pagina=2'));
+// Exercita os filtros reais, inclusive voltar às opções "Todos" após várias seleções.
+dom.window.history.pushState({},'', '/catalogo?pagina=3&ordem=maior');dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate'));
+const changeFilter=(name,value)=>{const field=doc.querySelector(`#filters [name="${name}"]`);field.value=value;field.dispatchEvent(new dom.window.Event('change',{bubbles:true}));};
+const chosen=catalog.find(p=>p.available&&p.brand==='Honda');
+doc.querySelector('details.filters').open=true;
+changeFilter('marca','Honda');changeFilter('categoria',chosen.category);changeFilter('disponibilidade','sim');
+assert.equal(doc.querySelector('details.filters').open,true,'Escolher um filtro não deve fechar o painel no celular');
+const filtered=catalog.filter(p=>p.brand==='Honda'&&p.available&&(p.category===chosen.category||p.category.startsWith(chosen.category+'/')));
+assert.equal(doc.querySelector('.catalog-heading p').textContent,`${filtered.length.toLocaleString('pt-BR')} produtos encontrados`);
+assert.equal(new URLSearchParams(dom.window.location.search).get('pagina'),null);
+assert.equal(doc.querySelector('#sort').value,'maior');
+const filteredNames=[...doc.querySelectorAll('.catalog-grid .product-name')].map(a=>a.textContent);
+assert.ok(filteredNames.every(name=>filtered.some(p=>p.name===name)));
+changeFilter('categoria','');changeFilter('marca','');changeFilter('disponibilidade','');
+assert.equal(doc.querySelector('.catalog-heading p').textContent,`${catalog.length.toLocaleString('pt-BR')} produtos encontrados`);
+for(const key of ['categoria','marca','disponibilidade'])assert.equal(new URLSearchParams(dom.window.location.search).has(key),false);
+const visiblePrices=[...doc.querySelectorAll('.catalog-grid .product-name')].map(a=>catalog.find(p=>p.slug===decodeURIComponent(new URL(a.href).pathname).slice(1)).price);
+assert.ok(visiblePrices.every((price,i)=>i===0||price<=visiblePrices[i-1]),'Ordenação deve ser preservada ao filtrar');
+dom.window.history.pushState({},'', '/motores?categoria=');dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate'));
+assert.equal(doc.querySelector('.catalog-heading p').textContent,`${catalog.length.toLocaleString('pt-BR')} produtos encontrados`);
+const available=catalog.find(p=>p.available&&p.images!==undefined&&p.image);
+assert.ok(available,'Deve haver produto disponível');
+dom.window.history.pushState({},'', '/'+available.slug);dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate'));
+await waitFor(()=>doc.querySelector('[data-add]'));
+assert.equal(doc.querySelector('.purchase h1').textContent,available.name);
+doc.querySelector('#quantity').value='2';doc.querySelector('[data-add]').click();
+assert.equal(doc.querySelector('#cart-count').textContent,'2');
+assert.equal(doc.querySelector('#mobile-cart-count').textContent,'2');
+assert.equal(doc.querySelector('#mobile-cart-count').hidden,false);
+assert.equal(doc.body.classList.contains('has-purchase-bar'),true);
+doc.querySelector('[data-open-cart]').click();assert.equal(doc.querySelector('#cart-dialog').open,true);
+assert.ok(doc.querySelector('.cart-total').textContent.includes((available.price*2).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})));
+doc.querySelector('[data-remove]').click();assert.equal(doc.querySelector('#cart-count').textContent,'0');
+doc.querySelector('#cart-close').click();
+const unavailable=catalog.find(p=>!p.available);
+dom.window.history.pushState({},'', '/'+unavailable.slug);dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate'));
+await waitFor(()=>doc.querySelector('.stock-note'));
+assert.equal(doc.querySelector('[data-add]'),null,'Peça indisponível não pode ser adicionada');
+assert.equal(doc.body.classList.contains('has-purchase-bar'),false);
+// A opção de armazenamento externo deve reescrever tanto a foto principal quanto miniaturas.
+dom.window.STOFFELS_CONFIG={imageBaseUrl:'https://storage.example.test/stoffels'};
+dom.window.history.pushState({},'', '/'+available.slug);dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate'));
+await waitFor(()=>doc.querySelector('[data-add]'));
+assert.ok(doc.querySelector('#main-photo').src.startsWith('https://storage.example.test/stoffels/'));
+assert.ok([...doc.querySelectorAll('[data-photo]')].every(x=>x.dataset.photo.startsWith('https://storage.example.test/stoffels/')));
+// O catálogo real não tem promoções hoje; a fixture abaixo verifica o escopo sem alterá-lo.
+const promoDOM=new JSDOM(html,{url:'http://localhost:3001/promocoes',runScripts:'outside-only'});
+const promoItem={...chosen,originalPrice:chosen.price+100};
+promoDOM.window.scrollTo=()=>{};
+promoDOM.window.fetch=async url=>({ok:true,json:async()=>String(url)==='/data/catalog.json'?catalog.map(p=>p.id===chosen.id?promoItem:p):categories});
+promoDOM.window.eval(js);
+await waitFor(()=>promoDOM.window.document.querySelector('.catalog-grid'));
+const promoDoc=promoDOM.window.document;
+assert.equal(promoDoc.querySelectorAll('.catalog-grid .product-card').length,1);
+const unavailableFilter=promoDoc.querySelector('#filters [name="disponibilidade"]');unavailableFilter.value='nao';unavailableFilter.dispatchEvent(new promoDOM.window.Event('change',{bubbles:true}));
+assert.equal(promoDOM.window.location.pathname,'/promocoes','Filtrar não deve sair da vitrine de ofertas');
+assert.equal(promoDoc.querySelectorAll('.catalog-grid .product-card').length,0);
+const promoAvailability=promoDoc.querySelector('#filters [name="disponibilidade"]');promoAvailability.value='';promoAvailability.dispatchEvent(new promoDOM.window.Event('change',{bubbles:true}));
+const otherCategory=promoDoc.querySelector('#filters [name="categoria"]');otherCategory.value=categories.find(c=>c.slug!==chosen.category&&!chosen.category.startsWith(c.slug+'/')).slug;otherCategory.dispatchEvent(new promoDOM.window.Event('change',{bubbles:true}));
+assert.equal(promoDoc.querySelectorAll('.catalog-grid .product-card').length,0,'Promoções devem respeitar o filtro de categoria');
+promoDOM.window.close();
+dom.window.close();
+console.log(`Verificação concluída: ${catalog.length} produtos, ${images.size} fotos locais, ${galleryCount} referências de galeria. Busca, paginação, detalhes e carrinho passaram.`);

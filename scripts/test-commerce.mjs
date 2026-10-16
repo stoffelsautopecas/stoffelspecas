@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { authPool } from '../lib/auth.js';
+import { closeDatabase } from '../lib/db/index.js';
+import { saveProduct,adminPost,adminGet } from '../lib/admin-store.js';
+import { createCheckout,verifyOrderPayment,validWebhookToken,webhookToken } from '../lib/payments.js';
+import { orderView } from '../lib/commerce.js';
+import { shippingFingerprint } from '../lib/shipping.js';
+import { CheckoutError } from '../lib/infinitepay.js';
+const client=await authPool().connect();let depth=0;
+const query=client.query.bind(client);
+const txClient={query:async(sql,args)=>{
+ if(sql==='begin')return query('savepoint test_'+(++depth));
+ if(sql==='commit')return query('release savepoint test_'+depth--);
+ if(sql==='rollback'){const n=depth--;await query('rollback to savepoint test_'+n);return query('release savepoint test_'+n);}
+ return query(sql,args);
+},release(){}};
+const pool={query,connect:async()=>txClient};
+try{
+ await query('begin');
+ const user={id:randomUUID(),name:'Teste isolado',email:'rollback-'+randomUUID()+'@example.invalid',role:'customer'};
+ await query("insert into stoffels.users(id,name,email,password_hash) values($1,$2,$3,'unused-test-hash')",[user.id,user.name,user.email]);
+ const category=(await query('select slug from stoffels.categories limit 1')).rows[0].slug;
+ const input={name:'Peça apenas no teste com rollback',brand:'Teste',model:'Teste',category,priceCents:19900,stockQuantity:3,images:['/images/brand/logo.png'],description:'<script>alert(1)</script>',shipping:{weightGrams:600,lengthCm:30,widthCm:20,heightCm:15,estimated:false}};
+ const saved=await saveProduct(input,pool);assert.match(saved.details.description,/&lt;script&gt;/);assert.equal('stockQuantity' in saved.catalog,false);
+ assert.equal((await adminGet(new URLSearchParams({view:'products',id:String(saved.id)}),pool)).product.stockQuantity,3);
+ const cart=[{id:saved.id,quantity:1}];
+ async function quote(items=cart){const records=(await query('select * from stoffels.products where id=$1',[saved.id])).rows;return (await query('insert into stoffels.shipping_quotes(cart_hash,postal_code,options) values($1,$2,$3) returning id',[shippingFingerprint(items,records),'97950000',JSON.stringify([{serviceId:'1',name:'Entrega teste',carrier:'Transportadora teste',priceCents:2500,deliveryDays:5}])])).rows[0].id;}
+ const base={items:cart,clientKey:randomUUID(),address:{receiver:'Teste isolado',cep:'97950000',street:'Rua Comandai',number:'1287',neighborhood:'Centro',city:'Guarani das Missões',state:'RS',complement:''},phone:'55996712043',quoteId:await quote(),serviceId:'1',priceCents:1,shippingCents:1};
+ let calls=0,payload;
+ const gateway={createLink:async p=>{calls++;payload=p;return {url:'https://checkout.infinitepay.com.br/test-'+p.order_nsu,slug:'test-'+p.order_nsu};},checkPayment:async()=>({success:true,paid:true,amount:22400,capture_method:'pix'})};
+ const first=await createCheckout({user,body:base,gateway},pool);assert.ok(first.url);assert.equal(calls,1);assert.equal(payload.items[0].price,19900);assert.equal(payload.items[1].price,2500);assert.equal(payload.customer.phone_number,'+5555996712043');
+ assert.ok(validWebhookToken(first.id,webhookToken(first.id)));assert.equal(validWebhookToken(first.id,'0'.repeat(64)),false);
+ const second=await createCheckout({user,body:base,gateway},pool);assert.equal(first.id,second.id);assert.equal(calls,1);
+ await assert.rejects(()=>createCheckout({user,body:{...base,phone:'11999990000'},gateway},pool),/outro carrinho/);
+ let stock=(await query('select stock_quantity from stoffels.products where id=$1',[saved.id])).rows[0].stock_quantity;assert.equal(stock,2);
+ assert.equal((await verifyOrderPayment({orderId:first.id,transactionNsu:'test-tx-1',slug:'test-'+first.id,gateway:{checkPayment:async()=>({success:true,paid:true,amount:1,paid_amount:22400,capture_method:'pix'})}},pool)).paid,false);
+ await assert.rejects(()=>adminPost({action:'order',id:first.id,fulfillmentStatus:'shipped',trackingCode:'ABC',trackingUrl:'',adminNote:''},user,pool),/pagamento confirmado/);
+ await verifyOrderPayment({orderId:first.id,transactionNsu:'test-tx-1',slug:'test-'+first.id,gateway},pool);
+ await verifyOrderPayment({orderId:first.id,transactionNsu:'test-tx-1',slug:'test-'+first.id,gateway},pool);
+ assert.equal((await query('select count(*)::int n from stoffels.payment_events where order_id=$1',[first.id])).rows[0].n,1);
+ assert.equal((await query('select stock_quantity from stoffels.products where id=$1',[saved.id])).rows[0].stock_quantity,2);
+ await adminPost({action:'order',id:first.id,fulfillmentStatus:'shipped',trackingCode:'TEST123',trackingUrl:'https://example.com/tracking',adminNote:'Interna'},user,pool);
+ const view=await orderView(pool,(await query('select * from stoffels.orders where id=$1',[first.id])).rows[0]);assert.equal(view.fulfillmentStatus,'shipped');assert.equal(view.adminNote,undefined);assert.equal(view.access_token_hash,undefined);
+ await adminPost({action:'message',id:first.id,message:'Mensagem de teste'},user,pool);
+ const failure=new CheckoutError('Rejeitado',502);failure.definitive=true;
+ const failed=await createCheckout({user,body:{...base,clientKey:randomUUID(),quoteId:await quote()},gateway:{createLink:async()=>{throw failure;}}},pool);assert.equal(failed.status,'failed');
+ assert.equal((await query('select stock_quantity from stoffels.products where id=$1',[saved.id])).rows[0].stock_quantity,2);
+ const uncertain=await createCheckout({user,body:{...base,clientKey:randomUUID(),quoteId:await quote()},gateway:{createLink:async()=>{throw new Error('timeout');}}},pool);assert.equal(uncertain.checkoutState,'uncertain');
+ await adminPost({action:'cancel',id:uncertain.id},user,pool);assert.equal((await query('select stock_quantity from stoffels.products where id=$1',[saved.id])).rows[0].stock_quantity,1);
+ await verifyOrderPayment({orderId:uncertain.id,transactionNsu:'test-late',slug:'test-late',gateway},pool);assert.equal((await query('select status from stoffels.orders where id=$1',[uncertain.id])).rows[0].status,'paid');
+ const tooMany=[{id:saved.id,quantity:2}];await assert.rejects(async()=>createCheckout({user,body:{...base,items:tooMany,clientKey:randomUUID(),quoteId:await quote(tooMany)},gateway},pool),/quantidade solicitada/);
+ const expiredQuote=await quote();await query("update stoffels.shipping_quotes set expires_at=now()-interval '1 second' where id=$1",[expiredQuote]);await assert.rejects(()=>createCheckout({user,body:{...base,clientKey:randomUUID(),quoteId:expiredQuote},gateway},pool),/cotação expirou/);
+ const freeQuote=await quote();await query('update stoffels.shipping_quotes set options=$1 where id=$2',[JSON.stringify([{serviceId:'free-no-quote',carrier:'Stoffels',name:'Frete grátis',priceCents:0,deliveryDays:null,freeFallback:true}]),freeQuote]);
+ let freePayload;
+ const freeOrder=await createCheckout({user,body:{...base,clientKey:randomUUID(),quoteId:freeQuote,serviceId:'free-no-quote',shippingCents:999999},gateway:{createLink:async p=>{freePayload=p;return {url:'https://checkout.infinitepay.io/test-free',slug:'test-free'};}}},pool);
+ assert.equal(freePayload.items.length,1);assert.equal(freePayload.items[0].price,19900);
+ const freeRow=(await query('select shipping_cents,total_cents from stoffels.orders where id=$1',[freeOrder.id])).rows[0];assert.equal(Number(freeRow.shipping_cents),0);assert.equal(Number(freeRow.total_cents),19900);
+ await adminPost({action:'archive',id:saved.id},user,pool);assert.equal((await query('select archived from stoffels.products where id=$1',[saved.id])).rows[0].archived,true);
+ await assert.rejects(()=>saveProduct({...input,images:['javascript:alert(1)']},pool));
+ console.log('Comércio: cadastro/edição de produto, preço e frete no servidor, reserva de estoque, idempotência, falhas do provedor, pagamentos duplicados/tardios, rastreio, mensagens e arquivamento verificados em transação revertida. Nenhuma chamada real ou cobrança.');
+}finally{await query('rollback');client.release();await closeDatabase();}

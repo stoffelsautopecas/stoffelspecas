@@ -1,0 +1,20 @@
+{
+  "provider": "infinitepay",
+  "paymentMethods": [
+    "pix",
+    "credit_card"
+  ],
+  "enabled": true,
+  "handle": "stoffels",
+  "documentationUrl": "https://www.infinitepay.io/checkout-documentacao",
+  "createLinkUrl": "https://api.checkout.infinitepay.io/links",
+  "paymentCheckUrl": "https://api.checkout.infinitepay.io/payment_check",
+  "shipping": {
+    "method": "calculated",
+    "provider": "melhor_envio",
+    "quoteOnly": true,
+    "originPostalCode": "97950000",
+    "label": "Frete calculado pelo CEP",
+    "freeWhenNoQuote": true
+  }
+}

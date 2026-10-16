@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {quoteCartShipping,shippingFingerprint} from '../lib/shipping.js';
+const records=[{id:1,available:true,price_cents:1800000,shipping:{freeShipping:true,weightGrams:180000,lengthCm:100,widthCm:90,heightCm:100}},{id:2,available:true,price_cents:10000,shipping:{weightGrams:500,lengthCm:20,widthCm:20,heightCm:10}}];
+let calls=0;const request=async(url,options)=>{calls++;const body=JSON.parse(options.body);assert.deepEqual(body.products.map(p=>p.id),['2']);return {ok:true,json:async()=>[{id:1,name:'PAC',company:{name:'Correios'},price:'25.00',delivery_time:5}]};};
+const input={cart:[{id:1,quantity:1}],records,token:'test',from:'97950000',to:'01001000'};
+const free=await quoteCartShipping(input,request);assert.equal(free[0].priceCents,0);assert.equal(free[0].freePromotion,true);assert.equal(calls,0);
+const mixed=await quoteCartShipping({...input,cart:[...input.cart,{id:2,quantity:1}]},request);assert.equal(mixed[0].priceCents,2500);assert.equal(calls,1);
+await assert.rejects(()=>quoteCartShipping({...input,records:[{...records[0],available:false}]},request),/indisponível/);
+assert.notEqual(shippingFingerprint(input.cart,records),shippingFingerprint(input.cart,[{...records[0],shipping:{...records[0].shipping,freeShipping:false}}]));
+console.log('Frete grátis por produto: zero sem transportadora, carrinho misto cobra demais peças e alteração invalida cotação.');
