@@ -84,6 +84,7 @@ async function renderRoute() {
   const sequence = ++routeSequence;
   document.body.classList.toggle('admin-mode',location.pathname.replace(/\/$/,'')==='/admin');
   const slug = decodeURIComponent(location.pathname).replace(/^\/+|\/+$/g,'');
+  document.body.classList.toggle('home-mode',slug==='');
   if(!['admin','minha-conta','pagamento','definir-senha','privacidade','trocas','sobre'].includes(slug)&&!slug.startsWith('pedido/')){
     if(!catalogReady){$('#main').innerHTML=slug===''?home():'<section class="container loading">Carregando peças…</section>';try{await ensureCatalog();}catch{if(sequence===routeSequence)$('#main').innerHTML='<section class="container empty"><h1>Não foi possível carregar as peças</h1><a href="/catalogo">Tentar novamente</a></section>';return;}if(sequence!==routeSequence)return;}
   }
