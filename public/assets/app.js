@@ -21,6 +21,8 @@ const productUrl = p => '/' + p.slug;
 const categoryTitle = slug => names[slug] || categories.find(c => c.slug === slug)?.name || slug.split('/').at(-1).replaceAll('-', ' ');
 
 function go(url) {
+ const nextSeller=new URL(url,location.origin).searchParams.get('loja');
+ if(Object.hasOwn(sellerNames,nextSeller)&&nextSeller!==activeSeller){location.assign(url);return;}
   if (location.pathname + location.search !== url) history.pushState({}, '', url);
   renderRoute();
   window.scrollTo({top:0,behavior:'instant'});

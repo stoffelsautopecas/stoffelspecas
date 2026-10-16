@@ -1,7 +1,8 @@
 // Operação restrita ao proprietário do servidor. Nunca recebe senha em argumentos.
 import { normalizeEmail,hashPassword,authPool } from '../lib/auth.js';
 import { closeDatabase } from '../lib/db/index.js';
-const action=process.argv[2],email=normalizeEmail(process.argv[3]);
+const action=process.argv[2],email=normalizeEmail(process.argv[3]),seller=process.argv[4];
+if(!['thiago','vitor'].includes(seller))throw new Error('Informe thiago ou vitor após o e-mail.');
 if(!['admin','password'].includes(action)){console.error('Uso: node --env-file=.env.local scripts/manage-user.mjs admin|password email');process.exit(1);}
 let password='';
 try{
@@ -13,9 +14,9 @@ try{
  const hash=await hashPassword(password);password='';const client=await authPool().connect();
  try{
   await client.query('begin');
-  if(action==='admin')await client.query("insert into stoffels.users(name,email,password_hash,role) values('Administração Stoffels',$1,$2,'admin') on conflict(email) do update set role='admin',password_hash=excluded.password_hash",[email,hash]);
-  else{const result=await client.query('update stoffels.users set password_hash=$1 where email=$2',[hash,email]);if(!result.rowCount)throw new Error('Conta não encontrada.');}
-  await client.query('delete from stoffels.sessions where user_id=(select id from stoffels.users where email=$1)',[email]);await client.query('commit');
+  if(action==='admin')await client.query("insert into stoffels.users(name,email,password_hash,role,seller_slug) values('Administração Stoffels',$1,$2,'admin',$3) on conflict(email) where role='admin' do update set role='admin',password_hash=excluded.password_hash",[email,hash,seller]);
+  else{const result=await client.query('update stoffels.users set password_hash=$1 where email=$2 and seller_slug=$3',[hash,email,seller]);if(!result.rowCount)throw new Error('Conta não encontrada.');}
+  await client.query('delete from stoffels.sessions where user_id=(select id from stoffels.users where email=$1 and seller_slug=$2)',[email,seller]);await client.query('commit');
  }catch(e){await client.query('rollback');throw e;}finally{client.release();}
  console.log('Conta atualizada. Sessões anteriores encerradas.');
 }catch(error){console.error('Falha:',error.code||error.message);process.exitCode=1;}finally{await closeDatabase();}

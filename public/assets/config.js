@@ -1,1 +1,1 @@
-window.STOFFELS_CONFIG = {imageBaseUrl:"",databaseApi:false};
+window.STOFFELS_CONFIG = {databaseApi:true,imageBaseUrl:""};

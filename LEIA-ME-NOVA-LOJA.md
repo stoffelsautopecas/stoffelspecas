@@ -1,29 +1,36 @@
-# Stoffels Peças — projeto independente
+# Stoffels Peças
 
-Pasta: stoffelspecas. Domínio previsto: https://www.stoffelspecas.com.br.
+Projeto independente da loja Stoffels original.
 
-Cópia do código completo e do catálogo em 16/10/2026: 7.969 produtos, mesmos preços, descrições, fotos, estoque interno e regras de frete. Fotos enviadas no painel foram salvas como arquivos locais para não depender do banco antigo.
+- Publicação: https://stoffelspecas.vercel.app
+- Domínio previsto: www.stoffelspecas.com.br (DNS pendente na HostGator).
+- GitHub: https://github.com/stoffelsautopecas/stoffelspecas
+- Banco Supabase próprio: lcianeigsenvmhyekmnu.
+- Loja Thiago: /?loja=thiago. Loja Vitor: /?loja=vitor.
+- Painel: /admin. Cada administrador vê somente seus clientes e pedidos; a associação é imutável e verificada no servidor.
+- Produtos, preços, estoque, categorias e dados da empresa são compartilhados entre os dois atendimentos deste projeto.
+- Aba Financeiro removida.
 
-## Rodar localmente
+Cada atendimento tem cadastros de clientes independentes, inclusive quando o e-mail é igual. A entrada pelo link escolhe o atendimento e mantém a escolha durante a navegação. Uma sessão de cliente de outro atendimento não autoriza acesso após a troca de link.
 
-As dependências já estão instaladas. Execute `npm run dev` e abra http://localhost:3002.
-A vitrine usa o catálogo local até configurar o novo banco. Login, painel administrativo, pedidos e checkout precisam do novo banco.
+## Desenvolvimento
 
-## Novo banco
+`npm ci` e `npm run dev`, porta 3002. Segredos somente em .env.local, ignorado pelo Git. Não usar credenciais da loja original.
 
-1. Crie um projeto Supabase independente e preencha DATABASE_URL e DIRECT_URL na .env.local. Atualize config/certs/supabase-ca.crt caso o certificado CA seja diferente.
-2. Execute `npm run db:migrate`.
-3. Execute `npm run db:restore-clone`. Este comando importa o catálogo atualizado, preservando preços, estoque, medidas e frete grátis. Ele recusa o banco original e bancos com usuários, produtos ou pedidos.
-4. Crie os administradores com `node --env-file=.env.local scripts/manage-user.mjs admin EMAIL`. A senha será solicitada sem exibição.
+## Publicação
 
-O snapshot local está em db/clone/catalog-snapshot.json, ignorado pelo Git e pela publicação. Não inclui clientes, senhas, sessões ou pedidos anteriores. Use db:restore-clone em vez do importador antigo db:seed para preservar todos os campos.
+Fotos importadas hospedadas neste repositório, com STOFFELS_IMAGE_BASE_URL apontando para public/images/products. Fotos recentes da cópia estão em public/images/uploads; novas fotos do painel usam o banco próprio.
 
-## Publicação independente
+`node scripts/prepare-deploy.mjs`, então `npx vercel deploy --prod --yes --archive=tgz` dentro de .deploy. O vínculo Vercel é do projeto stoffelspecas, nunca stoffels.
 
-Crie e vincule um NOVO projeto Vercel chamado stoffelspecas. Não há vínculo .vercel nem remoto Git herdado. Configure as variáveis do novo banco e STOREFRONT_URL=https://www.stoffelspecas.com.br no novo projeto. O segredo de webhook local é novo. Configure o token de cotação do Melhor Envio e habilite CHECKOUT_ENABLED somente depois de configurar e testar o checkout. A InfiniteTag permanece stoffels, pois é a mesma empresa.
+Quando configurar o domínio: alterar o CNAME www para fae53183148bcbb6.vercel-dns-017.com; confirmar na Vercel; atualizar STOREFRONT_URL e publicar novamente. Até lá o checkout usa o domínio vercel.app.
 
-As fotos estão nesta pasta. Não configure a URL de imagens do repositório antigo; ao escolher hospedagem de imagens, use um destino próprio da nova loja. As imagens completas somam centenas de MB, portanto revise o pacote antes da primeira publicação na Vercel.
+A InfiniteTag stoffels é a mesma empresa. Os pedidos, usuários, reservas, banco e segredo de webhook são independentes da loja original. Nenhuma etiqueta do Melhor Envio é comprada automaticamente.
 
-A aba Financeiro mantém os valores manuais da cópia; não representa saldo de um novo banco ou conta de pagamentos. O link de compra da Geovanna foi preservado e aponta para o mesmo link de pagamento fornecido anteriormente.
+## Validação
 
-As lojas NÃO sincronizam produtos, preços, estoque, clientes ou pedidos. A conta InfinitePay é a mesma empresa e pode ser mantida, mas cada instalação usa seu domínio e webhook próprios.
+`node --env-file=.env.local scripts/test-seller-isolation.mjs`: verifica isolamento e estoque compartilhado em transação revertida, com gateway simulado.
+
+## Cópia inicial
+
+7.969 produtos importados com os mesmos preços e imagens da loja original em 16/10/2026. Snapshot local ignorado pelo Git em db/clone/. Não reimportar por cima do banco em uso.
