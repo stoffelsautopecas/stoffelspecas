@@ -37,6 +37,7 @@ dialog{position:fixed;border:0;inset:auto 0 0;margin:0;width:100%;max-width:100%
 .admin-mode{background:#f3f4f6;padding:0}
 .admin-mode .app-header,.admin-mode .mobile-nav,.admin-mode footer{display:none}
 .admin-mode main{min-height:100dvh}
+.admin-mode .account-page{box-sizing:border-box;width:100%;max-width:100%;min-height:100svh;padding:24px 16px;display:flex;align-items:center;justify-content:center}.admin-mode .account-card{width:100%;max-width:440px;margin:0 auto}
 .admin-page{width:100%;max-width:none;padding:0;display:block;min-height:100dvh}
 .admin-sidebar{background:#18191b;color:#e5e5e5;padding:18px 16px}
 .admin-sidebar-brand{padding:0 4px 18px;border-bottom:1px solid #ffffff18}
