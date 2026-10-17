@@ -6,12 +6,15 @@ Projeto independente da loja Stoffels original.
 - Domínio previsto: www.stoffelspecas.com.br (DNS pendente na HostGator).
 - GitHub: https://github.com/stoffelsautopecas/stoffelspecas
 - Banco Supabase próprio: lcianeigsenvmhyekmnu.
-- Loja Thiago: /?loja=thiago. Loja Vitor: /?loja=vitor.
+- Loja Thiago: /?loja=thiago. Loja Rennan: /?loja=rennan.
+- Administradores: thiago@stoffelspecas.com.br e rennan@stoffelspecas.com.br.
+- Cadastro: o cliente escolhe Thiago, Rennan ou “Não fui atendido”; clientes sem atendente aparecem nos dois painéis.
+- WhatsApp: Thiago (15) 98175-9317 e Rennan (19) 98342-0556.
 - Painel: /admin. Cada administrador vê somente seus clientes e pedidos; a associação é imutável e verificada no servidor.
 - Produtos, preços, estoque, categorias e dados da empresa são compartilhados entre os dois atendimentos deste projeto.
 - Aba Financeiro removida.
 
-Cada atendimento tem cadastros de clientes independentes, inclusive quando o e-mail é igual. A entrada pelo link escolhe o atendimento e mantém a escolha durante a navegação. Uma sessão de cliente de outro atendimento não autoriza acesso após a troca de link.
+Clientes atribuídos ao Thiago ou Rennan aparecem apenas no painel correspondente. Clientes que escolhem “Não fui atendido” aparecem nos dois painéis. Produtos, preços e estoque são compartilhados.
 
 ## Desenvolvimento
 

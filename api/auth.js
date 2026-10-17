@@ -44,12 +44,12 @@ export default async function handler(req,res){
    const client=await authPool().connect();
    try{
     await client.query('begin');
-    const {rows}=await client.query('select id,name,email,role,seller_slug,password_hash from stoffels.users where email=$1 and (role=\'admin\' or seller_slug=$2) order by role asc limit 1 for update',[email,requestSeller(req)]);
+    const {rows}=await client.query('select id,name,email,role,seller_slug,password_hash from stoffels.users where email=$1 and (role=\'admin\' or seller_slug=$2 or seller_slug=\'both\') order by role asc limit 1 for update',[email,requestSeller(req)]);
     if(!await verifyPassword(body.password,rows[0]?.password_hash||dummy)||!rows[0])throw new AuthError('E-mail ou senha incorretos.',401);
     const {password_hash,...user}=rows[0];await createSession(req,res,user,client);await client.query('commit');json(res,200,{user});return;
    }catch(e){await client.query('rollback');throw e;}finally{client.release();}
   }
-  const seller=requestSeller(req);if(!seller)throw new AuthError('Escolha o atendimento de Thiago ou Vitor para criar sua conta.');
+  const seller=body.seller;if(!['thiago','rennan','both'].includes(seller))throw new AuthError('Escolha Thiago, Rennan ou Não fui atendido.');
   const name=typeof body.name==='string'?body.name.trim():'';
   if(name.length<2||name.length>100)throw new AuthError('Informe seu nome (2 a 100 caracteres).');
   const hash=await hashPassword(body.password);

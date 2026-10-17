@@ -2,7 +2,7 @@
 import { normalizeEmail,hashPassword,authPool } from '../lib/auth.js';
 import { closeDatabase } from '../lib/db/index.js';
 const action=process.argv[2],email=normalizeEmail(process.argv[3]),seller=process.argv[4];
-if(!['thiago','vitor'].includes(seller))throw new Error('Informe thiago ou vitor após o e-mail.');
+if(!['thiago','rennan'].includes(seller))throw new Error('Informe thiago ou rennan após o e-mail.');
 if(!['admin','password'].includes(action)){console.error('Uso: node --env-file=.env.local scripts/manage-user.mjs admin|password email');process.exit(1);}
 let password='';
 try{

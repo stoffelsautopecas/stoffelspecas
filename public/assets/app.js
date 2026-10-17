@@ -1,4 +1,4 @@
-const sellerNames={thiago:'Thiago',vitor:'Vitor'};
+const sellerNames={thiago:'Thiago',rennan:'Rennan',both:'Não fui atendido'};
 let activeSeller=null;
 try{const incoming=new URLSearchParams(location.search).get('loja');activeSeller=Object.hasOwn(sellerNames,incoming)?incoming:localStorage.getItem('stoffels-seller');if(!Object.hasOwn(sellerNames,activeSeller))activeSeller=null;if(activeSeller)localStorage.setItem('stoffels-seller',activeSeller);}catch{}
 const sellerHeaders=()=>activeSeller?{'X-Stoffels-Seller':activeSeller}:{};
@@ -133,8 +133,8 @@ function cartContent() {
   const pay=$('#pay-order');if(pay)pay.disabled=!selectedShippingService||checkoutSubmitting;
 }
 const dialogs = {
-  support:['Fale com a Stoffels','Atendimento pelo WhatsApp: (55) 99671-2043. Você também pode enviar mensagens na página do seu pedido.'],
-  warranty:['Garantia das peças','As peças do catálogo de origem têm garantia de 90 dias. Confira o estado, o código e a aplicação da peça antes da compra. Para solicitar atendimento, acesse seu pedido ou fale pelo WhatsApp (55) 99671-2043.'],
+  support:['Fale com a Stoffels','Fale pelo WhatsApp com o Thiago: (15) 98175-9317 ou com o Rennan: (19) 98342-0556.'],
+  warranty:['Garantia das peças','As peças do catálogo de origem têm garantia de 90 dias. Confira o estado, o código e a aplicação da peça antes da compra. Para solicitar atendimento, acesse seu pedido ou fale pelo WhatsApp com o Thiago (15) 98175-9317 ou o Rennan (19) 98342-0556.'],
   shipping:['Envio e entrega','Informe seu CEP no carrinho para consultar transportadoras, valores e prazos. O frete selecionado é somado ao total das peças. A disponibilidade depende das condições de transporte de cada peça.'],
   compatibility:['Compatibilidade','Confira marca, modelo, ano, motorização e código original da peça. A semelhança visual não garante compatibilidade. Consulte um profissional antes da instalação.']
 };
@@ -143,6 +143,7 @@ document.addEventListener('click', async event => {
   if (anchor && (!anchor.target||anchor.target==='_self') && !anchor.hasAttribute('download') && anchor.origin === location.origin && !anchor.hash && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.button===0) { event.preventDefault(); if (anchor.hasAttribute('data-close-cart')) $('#cart-dialog').close(); go(anchor.pathname+anchor.search); return; }
   const target = event.target.closest('button');
   if (!target) return;
+  if(target.hasAttribute('data-whatsapp-close')){target.closest('dialog').close();return;}
   if (target.dataset.dialog==='account') {go('/minha-conta');return;}
   if (target.dataset.dialog) { const [title,text]=dialogs[target.dataset.dialog]; $('#dialog-content').innerHTML=`<h2>${title}</h2><p>${text}</p>`; $('#info-dialog').showModal(); }
   if (target.id==='dialog-close') $('#info-dialog').close();
@@ -156,6 +157,7 @@ document.addEventListener('click', async event => {
   if (target.dataset.quantity) { const item=cart.find(x=>x.id===target.dataset.quantity);if(item)item.quantity=Math.min(99,item.quantity+Number(target.dataset.delta));cart=cart.filter(x=>x.quantity>0);saveCart();cartContent(); }
   if (target.dataset.photo) { $('#main-photo').src=target.dataset.photo;document.querySelectorAll('[data-photo]').forEach(x=>x.classList.toggle('selected',x===target)); }
   if (target.id==='zoom-photo') { $('#dialog-content').innerHTML=`<img class="zoomed" src="${esc($('#main-photo').src)}" alt="${esc($('#main-photo').alt)}">`;$('#info-dialog').showModal(); }
+  if(target.id==='home-whatsapp'){event.preventDefault();$('#whatsapp-dialog').showModal();}
   if (target.dataset.page) { const params=new URLSearchParams(location.search);params.set('pagina',target.dataset.page);go(location.pathname+'?'+params); }
 });
 document.addEventListener('submit',event=>{
@@ -226,14 +228,14 @@ async function accountApi(action,data={}) {
 }
 function loginForm(admin=false) {
   const register=!admin&&new URLSearchParams(location.search).get('cadastro')==='1',buying=new URLSearchParams(location.search).get('next')==='/checkout';
-  return `<section class="container account-page"><div class="account-card"><span class="eyebrow">${admin?'ADMINISTRAÇÃO':'MINHA CONTA'}</span><h1>${register?'Criar minha conta':admin?'Entrar no painel':'Entrar na minha conta'}</h1><p>${admin?'Acesso exclusivo da equipe Stoffels.':register&&buying?'Crie sua conta para continuar a compra. Seu carrinho será mantido.':'Acesse sua conta na Stoffels.'}</p><form id="account-form" data-action="${register?'register':'login'}">${register?'<label>Nome completo<input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>':''}<label>E-mail<input name="email" type="email" autocomplete="username" maxlength="254" required></label><label>Senha<input name="password" type="password" autocomplete="${register?'new-password':'current-password'}" ${register?'minlength="12"':''} maxlength="256" required></label>${register?'<small>Use pelo menos 12 caracteres.</small>':''}<p class="form-message" role="status" aria-live="polite"></p><button class="primary-button" type="submit">${register?(buying?'Cadastrar e continuar compra':'Criar conta'):'Entrar'}</button></form>${admin?'<a href="/minha-conta">Acesso do cliente →</a>':`<a href="/minha-conta?${new URLSearchParams({...(!register?{cadastro:'1'}:{}),...(new URLSearchParams(location.search).get('next')?{next:new URLSearchParams(location.search).get('next')}:{})})}">${register?'Já tenho uma conta':'Quero criar minha conta'} →</a>`}<p class="account-help">Esqueceu a senha? <a href="https://wa.me/5555996712043" target="_blank" rel="noopener noreferrer">Fale com a loja para recuperar o acesso.</a></p></div></section>`;
+  return `<section class="container account-page"><div class="account-card"><span class="eyebrow">${admin?'ADMINISTRAÇÃO':'MINHA CONTA'}</span><h1>${register?'Criar minha conta':admin?'Entrar no painel':'Entrar na minha conta'}</h1><p>${admin?'Acesso exclusivo da equipe Stoffels.':register&&buying?'Crie sua conta para continuar a compra. Seu carrinho será mantido.':'Acesse sua conta na Stoffels.'}</p><form id="account-form" data-action="${register?'register':'login'}">${register?'<label>Nome completo<input name="name" autocomplete="name" minlength="2" maxlength="100" required></label><label>Você foi atendido por alguém?<select name="seller" required><option value="">Selecione</option><option value="thiago">Thiago</option><option value="rennan">Rennan</option><option value="both">Não fui atendido</option></select></label>':''}<label>E-mail<input name="email" type="email" autocomplete="username" maxlength="254" required></label><label>Senha<input name="password" type="password" autocomplete="${register?'new-password':'current-password'}" ${register?'minlength="12"':''} maxlength="256" required></label>${register?'<small>Use pelo menos 12 caracteres.</small>':''}<p class="form-message" role="status" aria-live="polite"></p><button class="primary-button" type="submit">${register?(buying?'Cadastrar e continuar compra':'Criar conta'):'Entrar'}</button></form>${admin?'<a href="/minha-conta">Acesso do cliente →</a>':`<a href="/minha-conta?${new URLSearchParams({...(!register?{cadastro:'1'}:{}),...(new URLSearchParams(location.search).get('next')?{next:new URLSearchParams(location.search).get('next')}:{})})}">${register?'Já tenho uma conta':'Quero criar minha conta'} →</a>`}<p class="account-help">Esqueceu a senha? <a href="https://wa.me/5515981759317" target="_blank" rel="noopener noreferrer">Fale com a loja para recuperar o acesso.</a></p></div></section>`;
 }
 document.addEventListener('submit',async event=>{
  if(event.target.id!=='account-form')return;
  event.preventDefault();const form=event.target,button=form.querySelector('button[type="submit"],button:not([type])'),message=form.querySelector('.form-message');
  button.disabled=true;message.textContent='Aguarde…';
  try{
-  const result=await accountApi(form.dataset.action,Object.fromEntries(new FormData(form)));
+  const formData=Object.fromEntries(new FormData(form));const result=await accountApi(form.dataset.action,formData);if(form.dataset.action==='register'&&result.user?.seller_slug){activeSeller=result.user.seller_slug;try{localStorage.setItem('stoffels-seller',activeSeller);const nextUrl=new URL(location.href);nextUrl.searchParams.set('loja',activeSeller);history.replaceState({},'',nextUrl.pathname+nextUrl.search+nextUrl.hash);}catch{}}
   if(form.dataset.action==='password'){form.reset();message.textContent=result.message;}else if(form.dataset.action==='reset'){history.replaceState({},'',result.user.role==='admin'?'/admin':'/minha-conta');await renderRoute();}else{const next=new URLSearchParams(location.search).get('next');if(next&&next.startsWith('/')&&!next.startsWith('//'))go(next);else await renderRoute();}
  }catch(error){message.textContent=error.message;}finally{button.disabled=false;}
 });
@@ -243,7 +245,7 @@ document.addEventListener('click',async event=>{
  catch(error){const message=$('#main .form-message');if(message)message.textContent=error.message;}finally{button.disabled=false;}
 });
 
-let storeInfo={name:'Stoffels Autopeças',phone:'55996712043',cnpj:'04.966.153/0001-49',address:'Rua Comandai, 1287 - Centro, Guarani das Missões/RS, CEP 97950-000',dispatchDays:0};
+let storeInfo={name:'Stoffels Autopeças',phone:'15981759317',cnpj:'04.966.153/0001-49',address:'Rua Comandai, 1287 - Centro, Guarani das Missões/RS, CEP 97950-000',dispatchDays:0};
 let checkoutSubmitting=false,checkoutCustomer=null,accountAddresses=[];
 const statusLabel=value=>({pending:'Preparando pagamento',checkout_created:'Aguardando pagamento',paid:'Pagamento confirmado',cancelled:'Cancelado',failed:'Pagamento não iniciado',awaiting_payment:'Aguardando pagamento',processing:'Em preparação',shipped:'Enviado',delivered:'Entregue'}[value]||value);
 const dateLabel=value=>new Date(value).toLocaleString('pt-BR');
@@ -459,4 +461,4 @@ document.addEventListener('input',event=>{if(event.target.name==='cep'){const fo
 
 boot();
 
-const sellerBar=document.createElement('div');sellerBar.className='seller-bar';sellerBar.innerHTML=activeSeller?`Atendimento: <strong>${sellerNames[activeSeller]}</strong>`:'Escolha seu atendimento: <a href="/?loja=thiago">Thiago</a> <a href="/?loja=vitor">Vitor</a>';document.body.prepend(sellerBar);
+const sellerBar=document.createElement('div');sellerBar.className='seller-bar';sellerBar.innerHTML=activeSeller?`Atendimento: <strong>${sellerNames[activeSeller]}</strong>`:'Escolha seu atendimento: <a href="/?loja=thiago">Thiago</a> <a href="/?loja=rennan">Rennan</a> <a href="/?loja=both">Não fui atendido</a>';document.body.prepend(sellerBar);
