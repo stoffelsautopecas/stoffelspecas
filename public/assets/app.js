@@ -223,7 +223,9 @@ document.addEventListener('change',event=>{
  }
 });
 async function accountApi(action,data={}) {
-  const response=await fetch('/api/auth',action?{method:'POST',headers:{'Content-Type':'application/json',...sellerHeaders()},body:JSON.stringify({action,...data})}:{headers:sellerHeaders()});
+  let response;
+  try{response=await fetch('/api/auth',action?{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json',...sellerHeaders()},body:JSON.stringify({action,...data})}:{credentials:'same-origin',cache:'no-store',headers:sellerHeaders()});}
+  catch{throw new Error('Não foi possível conectar ao acesso da loja. Confira sua internet e tente novamente.');}
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Não foi possível acessar sua conta.');return result;
 }
 function loginForm(admin=false) {
@@ -249,7 +251,7 @@ let storeInfo={name:'Stoffels Autopeças',phone:'15981759317',cnpj:'04.966.153/0
 let checkoutSubmitting=false,checkoutCustomer=null,accountAddresses=[];
 const statusLabel=value=>({pending:'Preparando pagamento',checkout_created:'Aguardando pagamento',paid:'Pagamento confirmado',cancelled:'Cancelado',failed:'Pagamento não iniciado',awaiting_payment:'Aguardando pagamento',processing:'Em preparação',shipped:'Enviado',delivered:'Entregue'}[value]||value);
 const dateLabel=value=>new Date(value).toLocaleString('pt-BR');
-async function api(url,body){const response=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json',...sellerHeaders()},body:JSON.stringify(body)}:{headers:sellerHeaders()});let data;try{data=await response.json();}catch{throw new Error('Resposta inválida. Atualize a página e tente novamente.');}if(!response.ok){const error=new Error(data.error||'Não foi possível concluir a solicitação.');error.status=response.status;throw error;}return data;}
+async function api(url,body){let response;try{response=await fetch(url,body?{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json',...sellerHeaders()},body:JSON.stringify(body)}:{credentials:'same-origin',cache:'no-store',headers:sellerHeaders()});}catch{throw new Error('Não foi possível conectar ao painel. Confira sua internet e tente novamente.');}let data;try{data=await response.json();}catch{throw new Error('Resposta inválida. Atualize a página e tente novamente.');}if(!response.ok){const error=new Error(data.error||'Não foi possível concluir a solicitação.');error.status=response.status;throw error;}return data;}
 function field(label,name,value='',options=''){return `<label>${label}<input name="${name}" value="${esc(value??'')}" ${options}></label>`;}
 const formMessage='<p class="form-message" role="status" aria-live="polite"></p>';
 const states='AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ');
@@ -461,4 +463,3 @@ document.addEventListener('input',event=>{if(event.target.name==='cep'){const fo
 
 boot();
 
-const sellerBar=document.createElement('div');sellerBar.className='seller-bar';sellerBar.innerHTML=activeSeller?`Atendimento: <strong>${sellerNames[activeSeller]}</strong>`:'Escolha seu atendimento: <a href="/?loja=thiago">Thiago</a> <a href="/?loja=rennan">Rennan</a> <a href="/?loja=both">Não fui atendido</a>';document.body.prepend(sellerBar);
